@@ -1,11 +1,11 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"html/template"
 	"io"
-	"log"
 	"net/http"
+
+	"github.com/labstack/echo/v4"
 )
 
 type Note struct {
@@ -14,65 +14,46 @@ type Note struct {
 	Text    string `json:"text"`
 }
 
-var NoteStorage []Note
+var Notes = []Note{}
+
+type TemplateRenderer struct {
+	templates *template.Template
+}
+
+func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+
+	if viewContext, isMap := data.(map[string]interface{}); isMap {
+		viewContext["reverse"] = c.Echo().Reverse
+	}
+
+	return t.templates.ExecuteTemplate(w, name, data)
+}
 
 func main() {
-	http.HandleFunc("/", HandlerHome)
-	http.HandleFunc("/save", HandlerSaveNote)
-	http.HandleFunc("/list_all", HandlerListAll)
-	log.Fatal(http.ListenAndServe(":3000", nil))
-}
-
-func HandlerHome(resW http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		http.Error(resW, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
+	e := echo.New()
+	renderer := &TemplateRenderer{
+		templates: template.Must(template.ParseGlob("static/*.html")),
 	}
+	e.Renderer = renderer
 
-	name := req.URL.Query().Get("name")
-	fmt.Fprintf(resW, "Hello, %s", name)
-}
+	e.GET("/", func(c echo.Context) error {
+		return c.Render(http.StatusOK, "index.html", nil)
+	})
+	e.GET("/notes", func(c echo.Context) error {
+		return c.Render(http.StatusOK, "notes.html", nil)
+	})
 
-func HandlerSaveNote(resW http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		http.Error(resW, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
+	e.GET("/create_notes", func(c echo.Context) error {
+		return c.Render(http.StatusOK, "create.html", nil)
+	})
 
-	n := Note{}
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(resW, "Bad Request", http.StatusBadRequest)
-		return
-	}
+	e.POST("/create_notes", func(c echo.Context) error {
+		name := c.FormValue("name")
+		surname := c.FormValue("surname")
+		text := c.FormValue("text")
+		Notes = append(Notes, Note{name, surname, text})
+		return c.Render(http.StatusOK, "create.html", nil)
+	})
 
-	err = json.Unmarshal(body, &n)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(resW, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	NoteStorage = append(NoteStorage, n)
-	fmt.Fprintf(resW, "Name %s\n", n.Name)
-	fmt.Fprintf(resW, "Surname %s\n", n.Surname)
-	fmt.Fprintf(resW, "Note %s\n", n.Text)
-}
-
-func HandlerListAll(resW http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		http.Error(resW, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	Data, err := json.Marshal(NoteStorage)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(resW, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	resW.Header().Set("Content-Type", "application/json")
-	resW.Write(Data)
+	e.Logger.Fatal(e.Start(":3000"))
 }
