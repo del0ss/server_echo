@@ -3,12 +3,8 @@ package main
 import (
 	"html/template"
 	"io"
-<<<<<<< HEAD
 	"net/http"
 
-=======
-	"log"
->>>>>>> af7f3cb36774de29c427aad8bc40e49642125244
 	"github.com/labstack/echo/v4"
 )
 
